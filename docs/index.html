@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分数マスター</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="分数マスター">
+  <meta name="theme-color" content="#ec4899">
+  <meta name="description" content="2年の分数をゲームで。URLを開くだけ・記録はこの端末だけ。">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap');
+    
+    * { font-family: 'M PLUS Rounded 1c', sans-serif; }
+    
+    .fraction-line { width: 120px; height: 6px; background: currentColor; margin: 12px 0; }
+    .fraction-line-sm { width: 60px; height: 5px; background: currentColor; margin: 6px 0; }
+    
+    .num-btn {
+      width: 70px; height: 70px; border-radius: 12px;
+      font-size: 32px; font-weight: bold; transition: all 0.2s;
+    }
+    .num-btn:hover { transform: scale(1.1); }
+    .num-btn:active { transform: scale(0.95); }
+    
+    @keyframes splitHorizontal { 0% { opacity: 0; } 100% { opacity: 1; } }
+    .split-line { animation: splitHorizontal 0.5s ease-out forwards; }
+    
+    @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+    .pop-in { animation: popIn 0.5s ease-out forwards; }
+    
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+    .shake { animation: shake 0.5s ease-in-out; }
+    
+    @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+    .bounce { animation: bounce 0.5s ease-in-out; }
+    
+    .level-btn { transition: all 0.3s; }
+    .level-btn:not(:disabled):hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+    .level-btn:disabled { filter: grayscale(1); opacity: 0.5; }
+    
+    .highlight-part { animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    
+    .active-input {
+      background: linear-gradient(to bottom right, #fbbf24, #f59e0b) !important;
+      color: #1f2937 !important;
+      box-shadow: 0 0 0 5px #facc15 !important;
+    }
+    .done-input {
+      background: linear-gradient(to bottom right, #60a5fa, #3b82f6) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 0 5px #93c5fd !important;
+    }
+    .waiting-input {
+      background: #f3f4f6 !important;
+      color: #9ca3af !important;
+      box-shadow: 0 0 0 5px #d1d5db !important;
+    }
+    .tape-selected {
+      outline: 4px solid #f59e0b;
+      outline-offset: 2px;
+      border-radius: 8px;
+    }
+
+    /* ドット図 */
+    .dot-grid { display: flex; align-items: stretch; justify-content: center; gap: 0; margin: 0 auto; }
+    .dot-column { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px clamp(3px, 1.5vw, 10px); }
+    .dot-cell { font-size: clamp(22px, 7vw, 36px); line-height: 1; transition: transform 0.3s; }
+    .dot-gap {
+      width: clamp(14px, 4vw, 28px); min-height: 100%; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; position: relative; border-radius: 6px; transition: background 0.2s;
+    }
+    .dot-gap:hover { background: rgba(251, 191, 36, 0.2); }
+    .dot-gap-hint { width: 4px; height: 80%; border-radius: 2px; border: 2px dashed #d1d5db; transition: all 0.3s; }
+    .dot-gap.line-drawn .dot-gap-hint {
+      border: none; background: linear-gradient(to bottom, #ef4444, #f97316);
+      width: 6px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+    }
+    .dot-group-0 {
+      background: linear-gradient(135deg, #fef3c7, #fde68a);
+      border: 3px solid #f59e0b; border-radius: 12px;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .dot-group-1 { opacity: 0.45; }
+    .dot-group-2 { opacity: 0.45; }
+    .dot-group-3 { opacity: 0.45; }
+    .dot-group-label {
+      font-size: 13px; font-weight: 900; color: #d97706;
+      text-align: center; margin-top: 2px;
+    }
+
+    /* インライン回答欄 */
+    .inline-answer {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 6px; font-size: 1.25rem; font-weight: bold; color: #374151;
+    }
+    .inline-answer .ans-box {
+      width: 56px; height: 56px; border-radius: 14px; font-size: 28px; font-weight: 900;
+      display: flex; align-items: center; justify-content: center; transition: all 0.3s;
+    }
+
+    /* ばいと分数 テープ */
+    .bai-tape-container { width: 100%; max-width: 28rem; }
+    .bai-tape-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bai-tape-label {
+      min-width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 18px; color: white; flex-shrink: 0;
+    }
+    .bai-tape-bar { height: 44px; border-radius: 10px; position: relative; transition: all 0.5s; }
+    .bai-tape-dividers { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+    .bai-tape-divider { position: absolute; top: 0; bottom: 0; border-left: 2px dashed rgba(255,255,255,0.6); }
+
+    /* ばいと分数 回答エリア */
+    .bai-answer-row {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 8px; font-size: 1.25rem; font-weight: bold; color: #374151;
+    }
+    .bai-answer-row .ans-box {
+      width: 56px; height: 56px; border-radius: 14px; font-size: 28px; font-weight: 900;
+      display: flex; align-items: center; justify-content: center; transition: all 0.3s;
+    }
+    .bai-fraction-block { display: flex; flex-direction: column; align-items: center; }
+    .bai-fraction-block .ans-box { width: 48px; height: 48px; font-size: 24px; }
+
+    /* 音のボタン */
+    .snd-toggle {
+      width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.95);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 20px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; transition: transform 0.2s;
+    }
+    .snd-toggle:active { transform: scale(0.9); }
+    .snd-top { position: absolute; top: 12px; right: 12px; z-index: 30; }
+
+    /* 10もんの すすみ（まる） */
+    .pdots { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 0 auto 12px; max-width: 420px; }
+    .pdot {
+      width: 26px; height: 26px; border-radius: 50%; background: #f3f4f6; border: 2px solid #e5e7eb;
+      display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1;
+    }
+    .pdots.many .pdot { width: 20px; height: 20px; font-size: 12px; }
+    .pdot.now { border-color: #f59e0b; box-shadow: 0 0 0 3px #fde68a; }
+    .pdot.got { background: #fb923c; border-color: #fb923c; color: #fff; font-weight: 900; }
+    .pdot.hide-emoji { color: transparent; }
+
+    /* シール */
+    .sticker-get {
+      display: inline-flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 16px;
+      background: linear-gradient(135deg, #fff7ed, #fef3c7); border: 3px solid #fbbf24; border-radius: 999px;
+      font-weight: 900; color: #b45309;
+    }
+    .sticker-get .stk { font-size: 34px; line-height: 1; }
+    .sticker-new { background: #ef4444; color: #fff; font-size: 12px; border-radius: 999px; padding: 2px 8px; }
+    .fly-sticker {
+      position: fixed; z-index: 60; font-size: 44px; line-height: 1; pointer-events: none;
+      transition: transform 0.45s cubic-bezier(.4,-0.2,.6,1), opacity 0.45s;
+    }
+
+    /* トップのボタンのクリア印 */
+    .level-btn { position: relative; }
+    .lv-badge {
+      position: absolute; top: -10px; right: -8px; width: 42px; height: 42px; border-radius: 50%;
+      background: #fff; border: 3px solid #facc15; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .sb-open-btn {
+      display: inline-flex; align-items: center; gap: 10px; margin-top: 28px; padding: 12px 26px;
+      background: #fff; border: 4px solid #fbbf24; border-radius: 999px; font-weight: 900; font-size: 20px;
+      color: #b45309; box-shadow: 0 4px 12px rgba(0,0,0,0.12); transition: transform 0.2s;
+    }
+    .sb-open-btn:hover { transform: translateY(-3px); }
+
+    /* シール帳 */
+    .sb-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; max-width: 420px; margin-left: auto; margin-right: auto; }
+    @media (max-width: 480px) { .sb-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; } }
+    .sb-cell {
+      aspect-ratio: 1; border-radius: 50%; background: #f9fafb; border: 3px dashed #e5e7eb;
+      display: flex; align-items: center; justify-content: center; font-size: 28px; position: relative;
+      color: #d1d5db; font-weight: 900;
+    }
+    .sb-cell.got { border: 3px solid #fbbf24; background: radial-gradient(circle, #ffffff, #fef3c7); color: inherit; }
+    .sb-cnt {
+      position: absolute; bottom: -6px; right: -6px; background: #f97316; color: #fff; font-size: 12px;
+      border-radius: 999px; padding: 1px 6px; font-weight: 900; line-height: 1.4;
+    }
+    .big-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    @media (max-width: 480px) { .big-row { grid-template-columns: repeat(3, 1fr); } }
+    .big-stk {
+      border-radius: 18px; padding: 8px 2px; display: flex; flex-direction: column; align-items: center;
+      font-size: 11px; font-weight: 900; color: #fff; text-align: center; line-height: 1.3;
+    }
+    .big-stk .ic { font-size: 30px; line-height: 1.2; }
+    .big-stk.none { background: #f3f4f6 !important; color: #9ca3af; border: 3px dashed #e5e7eb; }
+    .big-stk.none .ic { filter: grayscale(1); opacity: 0.35; }
+    .big-sticker-clear {
+      width: 130px; height: 130px; border-radius: 50%; margin: 0 auto 14px; color: #fff;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border: 6px solid #fff; box-shadow: 0 0 0 5px #fbbf24, 0 8px 20px rgba(0,0,0,0.2);
+      font-weight: 900; font-size: 15px;
+    }
+    .big-sticker-clear .ic { font-size: 54px; line-height: 1.1; }
+
+    /* 先生の合言葉（数字キーパッド） */
+    .pin-dots { display: flex; gap: 10px; justify-content: center; min-height: 22px; margin: 14px 0 18px; }
+    .pin-dot { width: 18px; height: 18px; border-radius: 50%; background: #6366f1; }
+    .pin-dot.empty { background: #e5e7eb; }
+    .pin-pad { display: grid; grid-template-columns: repeat(3, 64px); gap: 10px; justify-content: center; }
+    .pin-key {
+      width: 64px; height: 64px; border-radius: 50%; background: #f3f4f6; font-size: 26px; font-weight: 900;
+      color: #374151; box-shadow: 0 2px 4px rgba(0,0,0,0.12); transition: transform 0.15s;
+    }
+    .pin-key:active { transform: scale(0.9); }
+    .pin-key.ok { background: #6366f1; color: #fff; font-size: 13px; white-space: nowrap; letter-spacing: -0.5px; }
+    .pin-key.del { font-size: 24px; }
+    .spinner {
+      width: 32px; height: 32px; border-radius: 50%; border: 4px solid #e5e7eb; border-top-color: #6366f1;
+      animation: spin 0.8s linear infinite; margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="h-full bg-gradient-to-br from-yellow-100 via-pink-100 to-blue-100 overflow-auto">
+  <div id="app" class="w-full min-h-full flex flex-col items-center justify-center p-4">
+    
+    <!-- トップ画面 -->
+    <button class="snd-toggle snd-top" id="snd-top" onclick="toggleSound()" aria-label="音のオンとオフ">🔊</button>
+    <div id="top-screen" class="text-center pt-12 md:pt-0">
+      <h1 class="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 mb-8 drop-shadow-lg">
+        🎯 分数マスター 🎯
+      </h1>
+      <p class="text-xl md:text-2xl text-gray-700 mb-10">分数をマスターしよう！</p>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+        <button id="level1-btn" class="level-btn bg-gradient-to-br from-green-400 to-green-600 text-white text-xl font-bold py-6 px-5 rounded-3xl shadow-lg">
+          🟩 レベル1<br><span class="text-base">おりがみ</span>
+        </button>
+        <button id="level2-btn" class="level-btn bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xl font-bold py-6 px-5 rounded-3xl shadow-lg">
+          📏 レベル2<br><span class="text-base">テープ</span>
+        </button>
+        <button id="level3-btn" class="level-btn bg-gradient-to-br from-purple-400 to-purple-600 text-white text-xl font-bold py-6 px-5 rounded-3xl shadow-lg">
+          🧩 レベル3<br><span class="text-base">くらべよう</span>
+        </button>
+        <button id="level4-btn" class="level-btn bg-gradient-to-br from-yellow-400 to-orange-500 text-white text-xl font-bold py-6 px-5 rounded-3xl shadow-lg">
+          🍪 レベル4<br><span class="text-base">おかしをわけよう</span>
+        </button>
+        <button id="level5-btn" class="level-btn bg-gradient-to-br from-teal-400 to-cyan-600 text-white text-xl font-bold py-6 px-5 rounded-3xl shadow-lg">
+          📐 レベル5<br><span class="text-base">ばいと分数</span>
+        </button>
+        <button id="special-btn" class="level-btn bg-gradient-to-br from-red-400 to-pink-600 text-white text-xl font-bold py-6 px-5 rounded-3xl shadow-lg">
+          ⭐ スペシャル<br><span class="text-base">ちょうせん！</span>
+        </button>
+      </div>
+      
+      <button id="sb-open" class="sb-open-btn" onclick="openStickerBook()"><span style="font-size:28px">📒</span><span>シールちょう</span><span id="sb-open-count" class="text-base text-orange-500"></span></button>
+    </div>
+
+    <!-- シール帳 -->
+    <div id="sticker-screen" class="hidden w-full max-w-2xl">
+      <div class="bg-white/95 rounded-3xl shadow-2xl p-4 md:p-6">
+        <div class="flex justify-between items-center mb-3">
+          <button class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-xl transition whitespace-nowrap" onclick="showScreen('top-screen');updateLevelButtons();">← もどる</button>
+          <h2 class="text-xl md:text-2xl font-black text-orange-500 whitespace-nowrap">📒 シールちょう</h2>
+          <button class="snd-toggle" onclick="toggleSound()" aria-label="音のオンとオフ">🔊</button>
+        </div>
+        <p id="sb-summary" class="text-center text-lg font-bold text-gray-600 mb-4"></p>
+        <h3 class="font-black text-gray-700 mb-2">🏅 クリアの 大きい シール</h3>
+        <div id="sb-big" class="big-row mb-6"></div>
+        <h3 class="font-black text-gray-700 mb-2">⭐ せいかいの シール <span id="sb-kinds" class="text-sm text-gray-500"></span></h3>
+        <div id="sb-grid" class="sb-grid mb-6"></div>
+        <div class="text-center">
+          <p class="text-xs text-gray-400 py-2" id="web-note">きろくを けす（先生）は Google版で 使えます</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ゲーム画面 -->
+    <div id="game-screen" class="hidden w-full max-w-2xl">
+      <div class="bg-white/90 backdrop-blur rounded-3xl shadow-2xl p-4 md:p-6">
+        <div class="flex justify-between items-center mb-4">
+          <button id="back-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-3 md:px-4 rounded-xl transition whitespace-nowrap">← もどる</button>
+          <div id="level-indicator" class="text-sm md:text-base font-bold text-purple-600 whitespace-nowrap"></div>
+          <div class="flex items-center gap-2">
+            <div id="question-counter" class="text-base md:text-lg font-bold text-blue-600 whitespace-nowrap"></div>
+            <button class="snd-toggle" onclick="toggleSound()" aria-label="音のオンとオフ">🔊</button>
+          </div>
+        </div>
+        <div id="pdots" class="pdots"></div>
+        <div id="question-area" class="min-h-40 flex flex-col items-center justify-center mb-4"></div>
+        <div id="question-text" class="text-xl md:text-2xl font-bold text-center text-gray-800 mb-4"></div>
+        <div id="answer-area" class="flex flex-col items-center mb-4"></div>
+        <div id="numpad" class="grid grid-cols-5 gap-2 justify-center max-w-md mx-auto"></div>
+      </div>
+    </div>
+    
+    <!-- 結果画面 -->
+    <div id="result-screen" class="hidden text-center">
+      <div id="result-content" class="bg-white/90 backdrop-blur rounded-3xl shadow-2xl p-8 max-w-md mx-auto"></div>
+    </div>
+    
+    <!-- スペシャル説明画面 -->
+    <div id="special-intro" class="hidden text-center">
+      <div class="bg-white/90 backdrop-blur rounded-3xl shadow-2xl p-8 max-w-lg mx-auto">
+        <h2 class="text-3xl font-black text-red-500 mb-6">⭐ スペシャルコース ⭐</h2>
+        <div class="text-xl text-gray-700 mb-6 space-y-4">
+          <p>🎯 もんだいは<span class="font-bold text-red-500">20もん</span>あるよ！</p>
+          <p>📚 いままでのもんだいが<br>ぜんぶまざっているよ！</p>
+          <div class="bg-red-100 border-2 border-red-300 rounded-2xl p-4 mt-4">
+            <p class="text-red-600 font-bold text-2xl">⚠️ ちゅうい！⚠️</p>
+            <p class="text-red-500 font-bold mt-2">1もんでもまちがえたら<br>さいしょからやりなおし！</p>
+          </div>
+        </div>
+        <div class="flex gap-4 justify-center">
+          <button id="special-cancel" class="bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-3 px-6 rounded-xl transition">やめておく</button>
+          <button id="special-start" class="bg-gradient-to-r from-red-400 to-pink-600 hover:from-red-500 hover:to-pink-700 text-white font-bold py-3 px-6 rounded-xl transition">ちょうせんする！</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 先生の合言葉 -->
+    <div id="pin-overlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-3xl p-6 max-w-sm mx-4 text-center w-full">
+        <h3 class="text-xl font-black text-gray-700">きろくを ぜんぶ けします</h3>
+        <p class="text-sm text-gray-500 mt-1">この たんまつの シールと クリアの しるしが きえます。<br>先生の あいことばを いれてください。</p>
+        <div id="pin-body">
+          <div id="pin-dots" class="pin-dots"></div>
+          <p id="pin-msg" class="text-sm font-bold text-red-500 mb-2" style="min-height:20px"></p>
+          <div class="pin-pad" id="pin-pad"></div>
+        </div>
+        <div id="pin-loading" class="hidden py-10"><div class="spinner"></div><p class="mt-3 text-gray-500 font-bold">たしかめています…</p></div>
+        <div id="pin-done" class="hidden py-8"><div class="text-5xl mb-2">🧹</div><p class="text-lg font-black text-gray-700">きろくを けしました</p></div>
+        <button id="pin-cancel" class="mt-5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-6 rounded-xl" onclick="closePinDialog()">やめる</button>
+      </div>
+    </div>
+
+    <!-- フィードバックオーバーレイ -->
+    <div id="feedback-overlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div id="feedback-content" class="bg-white rounded-3xl p-8 max-w-sm mx-4 text-center"></div>
+    </div>
+    
+  </div>
+
+  <script>
+    // ========== ゲーム状態 ==========
+    var gameState = {
+      currentLevel: 0, currentQuestion: 0, totalQuestions: 10,
+      questions: [], wrongQuestions: [], isRetrying: false,
+      numerator: null, denominator: null, inputTarget: 'denominator', selectedTape: null,
+      level1Cleared: false, level2Cleared: false, level3Cleared: false,
+      level4Cleared: false, level5Cleared: false, specialCleared: false,
+      dividePhase: 'lines', drawnLines: [], divideCount: null, divideInputStep: 'denominator',
+      baiInputStep: 'bai', baiAnswer: null
+    };
+
+    // ========== レベルボタン（全解放） ==========
+    function updateLevelButtons() {
+      ['level1-btn','level2-btn','level3-btn','level4-btn','level5-btn','special-btn'].forEach(function(id, i) {
+        var b = document.getElementById(id);
+        b.disabled = false;
+        var old = b.querySelector('.lv-badge');
+        if (old) old.remove();
+        if (save.big[i + 1]) {
+          var s = document.createElement('span');
+          s.className = 'lv-badge';
+          s.textContent = '👑';
+          b.appendChild(s);
+        }
+      });
+      document.getElementById('sb-open-count').textContent = save.total > 0 ? save.total + 'まい' : '';
+    }
+
+    /* ========== シール・きろく（この端末に残す） ========== */
+    var STK_POOL = ['🍓','🍒','🍑','🍊','🍋','🍎','🍇','🍉','🍌','🥝','🦁','🐯','🐳','🐙','🦄','🐶','🐱','🐰','🐻','🐼','🐨','🐸','🐥','🐧','🦊','🌻','🌈','⭐','🎈','🚀'];
+    var BIG_STK = {
+      1: { icon: '🟩', name: 'おりがみ', bg: 'linear-gradient(135deg,#4ade80,#16a34a)' },
+      2: { icon: '📏', name: 'テープ', bg: 'linear-gradient(135deg,#60a5fa,#2563eb)' },
+      3: { icon: '🧩', name: 'くらべよう', bg: 'linear-gradient(135deg,#c084fc,#9333ea)' },
+      4: { icon: '🍪', name: 'おかし', bg: 'linear-gradient(135deg,#facc15,#f97316)' },
+      5: { icon: '📐', name: 'ばいと分数', bg: 'linear-gradient(135deg,#2dd4bf,#0891b2)' },
+      6: { icon: '🏆', name: 'スペシャル', bg: 'linear-gradient(135deg,#f87171,#db2777)' }
+    };
+    var SAVE_KEY = 'bunsuMaster_v1';
+    var canSave = (function() { try { localStorage.setItem('bunsuMaster_t', '1'); var ok = localStorage.getItem('bunsuMaster_t') === '1'; localStorage.removeItem('bunsuMaster_t'); return ok; } catch (e) { return false; } })();
+    var save = loadSave();
+
+    function loadSave() {
+      var d = { st: {}, total: 0, big: {}, sound: true };
+      try {
+        var raw = localStorage.getItem(SAVE_KEY);
+        if (raw) {
+          var o = JSON.parse(raw);
+          if (o && typeof o === 'object') {
+            if (o.st && typeof o.st === 'object') d.st = o.st;
+            if (typeof o.total === 'number') d.total = o.total;
+            if (o.big && typeof o.big === 'object') d.big = o.big;
+            if (o.sound === false) d.sound = false;
+          }
+        }
+      } catch (e) {}
+      return d;
+    }
+    function writeSave() {
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
+    }
+    function awardSticker() {
+      var notYet = STK_POOL.filter(function(x) { return !save.st[x]; });
+      var pool = notYet.length > 0 && Math.random() < 0.6 ? notYet : STK_POOL;
+      var e = pool[Math.floor(Math.random() * pool.length)];
+      var isNew = !save.st[e];
+      save.st[e] = (save.st[e] || 0) + 1;
+      save.total++;
+      writeSave();
+      return { e: e, isNew: isNew };
+    }
+
+    /* ========== 音（小さく・短く） ========== */
+    var actx = null;
+    function playSound(kind) {
+      if (!save.sound) return;
+      try {
+        if (!actx) {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          actx = new AC();
+        }
+        if (actx.state === 'suspended') actx.resume();
+        var notes = kind === 'clear' ? [[784, 0], [988, 0.12], [1175, 0.24], [1568, 0.38]] : [[880, 0], [1319, 0.09]];
+        notes.forEach(function(n) {
+          var o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + n[1];
+          o.type = 'sine';
+          o.frequency.value = n[0];
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+          o.connect(g);
+          g.connect(actx.destination);
+          o.start(t);
+          o.stop(t + 0.3);
+        });
+      } catch (e) {}
+    }
+    function toggleSound() {
+      save.sound = !save.sound;
+      writeSave();
+      renderSoundButtons();
+    }
+    function renderSoundButtons() {
+      var els = document.querySelectorAll('.snd-toggle');
+      for (var i = 0; i < els.length; i++) els[i].textContent = save.sound ? '🔊' : '🔇';
+    }
+
+    /* ========== すすみの まる ========== */
+    function renderDots(hideIndex) {
+      var total = gameState.isRetrying ? gameState.wrongQuestions.length : gameState.totalQuestions;
+      var box = document.getElementById('pdots');
+      box.className = 'pdots' + (total > 10 ? ' many' : '');
+      var h = '';
+      for (var i = 0; i < total; i++) {
+        var e = gameState.dotStickers[i];
+        var cls = 'pdot' + (e ? ' got' : '') + (i === gameState.currentQuestion && !e ? ' now' : '') + (i === hideIndex ? ' hide-emoji' : '');
+        h += '<div class="' + cls + '" id="pdot-' + i + '">' + (e ? '✓' : '') + '</div>';
+      }
+      box.innerHTML = h;
+    }
+    function flyStickerToDot(idx, emoji, done) {
+      renderDots(idx);
+      var gs = document.getElementById('game-screen');
+      gs.style.pointerEvents = 'none';
+      var dot = document.getElementById('pdot-' + idx);
+      if (!dot) { gs.style.pointerEvents = ''; done(); return; }
+      var r = dot.getBoundingClientRect();
+      var f = document.createElement('div');
+      f.className = 'fly-sticker';
+      f.textContent = emoji;
+      var sx = window.innerWidth / 2 - 22, sy = window.innerHeight / 2 - 22;
+      f.style.left = sx + 'px';
+      f.style.top = sy + 'px';
+      document.body.appendChild(f);
+      var tx = r.left + r.width / 2 - 22 - sx, ty = r.top + r.height / 2 - 22 - sy;
+      var finished = false;
+      function end() {
+        if (finished) return;
+        finished = true;
+        if (f.parentNode) f.parentNode.removeChild(f);
+        var d2 = document.getElementById('pdot-' + idx);
+        if (d2) { d2.classList.remove('hide-emoji'); d2.classList.add('pop-in'); }
+        setTimeout(function() { gs.style.pointerEvents = ''; done(); }, 150);
+      }
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          f.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(0.4)';
+          f.style.opacity = '0.6';
+        });
+      });
+      setTimeout(end, 480);
+    }
+
+    /* ========== シール帳 ========== */
+    function openStickerBook() {
+      var kinds = 0;
+      var g = '';
+      STK_POOL.forEach(function(e) {
+        var n = save.st[e] || 0;
+        if (n > 0) kinds++;
+        g += n > 0 ? '<div class="sb-cell got">' + e + (n > 1 ? '<span class="sb-cnt">' + n + '</span>' : '') + '</div>' : '<div class="sb-cell">？</div>';
+      });
+      document.getElementById('sb-grid').innerHTML = g;
+      document.getElementById('sb-kinds').textContent = '（' + kinds + ' / ' + STK_POOL.length + ' しゅるい）';
+      var b = '';
+      for (var lv = 1; lv <= 6; lv++) {
+        var s = BIG_STK[lv];
+        b += save.big[lv] ? '<div class="big-stk" style="background:' + s.bg + '"><span class="ic">' + s.icon + '</span>' + s.name + '</div>' : '<div class="big-stk none"><span class="ic">' + s.icon + '</span>' + s.name + '</div>';
+      }
+      document.getElementById('sb-big').innerHTML = b;
+      document.getElementById('sb-summary').textContent = (save.total > 0 ? 'シールは ぜんぶで ' + save.total + 'まい！' : 'もんだいに せいかいすると シールが もらえるよ！') + (canSave ? '' : '（この たんまつでは シールが のこりません）');
+      showScreen('sticker-screen');
+    }
+
+    /* ========== 先生の合言葉（きろくを けす） ========== */
+    var pinValue = '', pinBusy = false;
+    function openPinDialog() {
+      pinValue = '';
+      pinBusy = false;
+      document.getElementById('pin-msg').textContent = '';
+      document.getElementById('pin-body').classList.remove('hidden');
+      document.getElementById('pin-loading').classList.add('hidden');
+      document.getElementById('pin-done').classList.add('hidden');
+      document.getElementById('pin-cancel').textContent = 'やめる';
+      var h = '';
+      [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(function(n) { h += '<button class="pin-key" onclick="pinInput(' + n + ')">' + n + '</button>'; });
+      h += '<button class="pin-key del" onclick="pinDelete()" aria-label="1つ もどす">←</button><button class="pin-key" onclick="pinInput(0)">0</button><button class="pin-key ok" onclick="pinSubmit()">けってい</button>';
+      document.getElementById('pin-pad').innerHTML = h;
+      renderPinDots();
+      document.getElementById('pin-overlay').classList.remove('hidden');
+    }
+    function closePinDialog() {
+      if (pinBusy) return;
+      document.getElementById('pin-overlay').classList.add('hidden');
+    }
+    function renderPinDots() {
+      var h = '';
+      for (var i = 0; i < Math.max(4, pinValue.length); i++) h += '<span class="pin-dot' + (i < pinValue.length ? '' : ' empty') + '"></span>';
+      document.getElementById('pin-dots').innerHTML = h;
+    }
+    function pinInput(n) {
+      if (pinBusy || pinValue.length >= 8) return;
+      pinValue += String(n);
+      document.getElementById('pin-msg').textContent = '';
+      renderPinDots();
+    }
+    function pinDelete() {
+      if (pinBusy) return;
+      pinValue = pinValue.slice(0, -1);
+      renderPinDots();
+    }
+    function pinWrong(msg) {
+      pinBusy = false;
+      pinValue = '';
+      document.getElementById('pin-loading').classList.add('hidden');
+      document.getElementById('pin-body').classList.remove('hidden');
+      document.getElementById('pin-msg').textContent = msg;
+      renderPinDots();
+      var d = document.getElementById('pin-dots');
+      d.classList.add('shake');
+      setTimeout(function() { d.classList.remove('shake'); }, 500);
+    }
+    function pinSubmit() {
+      if (pinBusy) return;
+      if (pinValue.length < 4) { pinWrong('4けた いじょう いれてね'); return; }
+      pinBusy = true;
+      document.getElementById('pin-body').classList.add('hidden');
+      document.getElementById('pin-loading').classList.remove('hidden');
+      var pin = pinValue;
+      pinWrong('この きのうは Google版で 使えます'); return;
+      google.script.run
+        .withSuccessHandler(function(ok) {
+          if (!ok) { pinWrong('あいことばが ちがいます'); return; }
+          save = { st: {}, total: 0, big: {}, sound: save.sound };
+          writeSave();
+          gameState.level1Cleared = gameState.level2Cleared = gameState.level3Cleared = false;
+          gameState.level4Cleared = gameState.level5Cleared = gameState.specialCleared = false;
+          pinBusy = false;
+          document.getElementById('pin-loading').classList.add('hidden');
+          document.getElementById('pin-done').classList.remove('hidden');
+          document.getElementById('pin-cancel').textContent = 'とじる';
+          openStickerBook();
+          updateLevelButtons();
+        })
+        .withFailureHandler(function() { pinWrong('つながりませんでした。もういちど ためしてね'); })
+        .checkResetPin(pin);
+    }
+    document.addEventListener('keydown', function(ev) {
+      if (document.getElementById('pin-overlay').classList.contains('hidden')) return;
+      if (ev.key >= '0' && ev.key <= '9') { pinInput(Number(ev.key)); ev.preventDefault(); }
+      else if (ev.key === 'Backspace') { pinDelete(); ev.preventDefault(); }
+      else if (ev.key === 'Enter') { pinSubmit(); ev.preventDefault(); }
+      else if (ev.key === 'Escape') { closePinDialog(); }
+    });
+
+    function pickWrongDiv(correctDiv) {
+      var c = [2,3,4,5,6].filter(function(d){return d!==correctDiv;});
+      return c[Math.floor(Math.random()*c.length)];
+    }
+
+    var divideConfigs = [
+      {people:2,cols:4,rows:2},{people:2,cols:6,rows:2},{people:2,cols:4,rows:3},
+      {people:3,cols:3,rows:2},{people:3,cols:6,rows:2},{people:3,cols:3,rows:3},
+      {people:4,cols:4,rows:2},{people:4,cols:4,rows:3}
+    ];
+    var sweetEmojis = ['🍪','🍬','🍩','🧁','🍫','🍭','🍮'];
+    function pickSweetEmoji(){return sweetEmojis[Math.floor(Math.random()*sweetEmojis.length)];}
+    var namePairs = [{a:'あみ',b:'りく'},{a:'さくら',b:'はると'},{a:'ゆい',b:'そうた'},{a:'ひな',b:'れん'}];
+    function pickNamePair(){return namePairs[Math.floor(Math.random()*namePairs.length)];}
+
+    // ========== 問題生成 ==========
+    function generateQuestions(level) {
+      var qs = [], i, div, cfg, total, cl, cpg, k, ratio, ca;
+      if (level===1) {
+        for(i=0;i<10;i++){div=[2,4,8][Math.floor(Math.random()*3)];qs.push({type:'origami',divisions:div,answer:{numerator:1,denominator:div}});}
+      } else if (level===2) {
+        for(i=0;i<10;i++){div=[2,3,4,5,6,8][Math.floor(Math.random()*6)];qs.push({type:'tape',divisions:div,answer:{numerator:1,denominator:div}});}
+      } else if (level===3) {
+        var rs=[{short:1,long:2},{short:1,long:3},{short:1,long:4},{short:1,long:5},{short:1,long:6}];
+        for(i=0;i<10;i++){ratio=rs[Math.floor(Math.random()*rs.length)];ca=Math.random()<0.5?'A':'B';qs.push({type:'compare',ratio:ratio,correctAnswer:ca,wrongDiv:pickWrongDiv(ratio.long),answer:{numerator:ratio.short,denominator:ratio.long}});}
+      } else if (level===4) {
+        for(i=0;i<10;i++){cfg=divideConfigs[Math.floor(Math.random()*divideConfigs.length)];total=cfg.cols*cfg.rows;cl=[];cpg=cfg.cols/cfg.people;for(k=1;k<cfg.people;k++)cl.push(k*cpg);qs.push({type:'divide',people:cfg.people,cols:cfg.cols,rows:cfg.rows,total:total,emoji:pickSweetEmoji(),correctLines:cl,answer:{numerator:1,denominator:cfg.people,count:total/cfg.people}});}
+      } else if (level===5) {
+        qs = generateBaiQuestions(10);
+      } else if (level===6) {
+        for(i=0;i<20;i++){
+          var t=Math.floor(Math.random()*5);
+          if(t===0){div=[2,4,8][Math.floor(Math.random()*3)];qs.push({type:'origami',divisions:div,answer:{numerator:1,denominator:div}});}
+          else if(t===1){div=[2,3,4,5,6,8][Math.floor(Math.random()*6)];qs.push({type:'tape',divisions:div,answer:{numerator:1,denominator:div}});}
+          else if(t===2){var rs2=[{short:1,long:2},{short:1,long:3},{short:1,long:4},{short:1,long:5},{short:1,long:6}];ratio=rs2[Math.floor(Math.random()*rs2.length)];ca=Math.random()<0.5?'A':'B';qs.push({type:'compare',ratio:ratio,correctAnswer:ca,wrongDiv:pickWrongDiv(ratio.long),answer:{numerator:ratio.short,denominator:ratio.long}});}
+          else if(t===3){cfg=divideConfigs[Math.floor(Math.random()*divideConfigs.length)];total=cfg.cols*cfg.rows;cl=[];cpg=cfg.cols/cfg.people;for(k=1;k<cfg.people;k++)cl.push(k*cpg);qs.push({type:'divide',people:cfg.people,cols:cfg.cols,rows:cfg.rows,total:total,emoji:pickSweetEmoji(),correctLines:cl,answer:{numerator:1,denominator:cfg.people,count:total/cfg.people}});}
+          else{qs.push(generateBaiQuestions(1)[0]);}
+        }
+      }
+      return qs;
+    }
+
+    function generateBaiQuestions(count) {
+      var qs=[], mults=[2,3,4,5], askTypes=['bai','fraction','both'];
+      for(var i=0;i<count;i++){
+        var m=mults[Math.floor(Math.random()*mults.length)];
+        var names=pickNamePair();
+        var at=askTypes[Math.floor(Math.random()*askTypes.length)];
+        var longA=Math.random()<0.5;
+        qs.push({type:'bai_fraction',multiplier:m,names:names,longIsA:longA,askType:at,answer:{bai:m,numerator:1,denominator:m}});
+      }
+      return qs;
+    }
+
+    // ========== 画面切り替え ==========
+    function showScreen(id){['top-screen','game-screen','result-screen','special-intro','sticker-screen'].forEach(function(s){document.getElementById(s).classList.add('hidden');});document.getElementById(id).classList.remove('hidden');document.getElementById('snd-top').classList.toggle('hidden',id==='game-screen'||id==='sticker-screen');window.scrollTo(0,0);}
+
+    // ========== ゲーム開始 ==========
+    function startLevel(level) {
+      gameState.currentLevel=level; gameState.currentQuestion=0; gameState.wrongQuestions=[]; gameState.isRetrying=false; gameState.dotStickers=[]; gameState.retryWrong=[]; gameState.answering=false; gameState.runId=(gameState.runId||0)+1;
+      gameState.totalQuestions=level===6?20:10;
+      gameState.questions=generateQuestions(level);
+      var ln=['','おりがみ','テープ','くらべよう','おかしをわけよう','ばいと分数',''];
+      document.getElementById('level-indicator').innerHTML=level===6?'スペシャル':'レベル'+level+'<span class="hidden md:inline">: '+ln[level]+'</span>';
+      showScreen('game-screen'); showQuestion();
+    }
+
+    // ========== 問題表示 ==========
+    function showQuestion() {
+      var q=gameState.isRetrying?gameState.wrongQuestions[gameState.currentQuestion]:gameState.questions[gameState.currentQuestion];
+      var total=gameState.isRetrying?gameState.wrongQuestions.length:gameState.totalQuestions;
+      document.getElementById('question-counter').textContent=(gameState.currentQuestion+1)+' / '+total;
+      gameState.answering=false;
+      renderDots(-1);
+      gameState.numerator=null;gameState.denominator=null;gameState.divideCount=null;
+      gameState.inputTarget='denominator';gameState.selectedTape=null;gameState.drawnLines=[];
+      gameState.dividePhase='lines';gameState.divideInputStep='denominator';
+      gameState.baiInputStep='bai';gameState.baiAnswer=null;
+      var qa=document.getElementById('question-area'),qt=document.getElementById('question-text'),aa=document.getElementById('answer-area'),np=document.getElementById('numpad');
+      
+      if(q.type==='origami'){renderOrigamiQuestion(q,qa);qt.textContent='1つぶんは なんぶんの いくつ？';renderFractionAnswer(aa);renderNumpad(np);}
+      else if(q.type==='tape'){renderTapeQuestion(q,qa);qt.textContent='1つぶんは なんぶんの いくつ？';renderFractionAnswer(aa);renderNumpad(np);}
+      else if(q.type==='compare'){renderCompareQuestion(q,qa);qt.textContent='オレンジのテープは どちらの テープの いちぶかな？';renderCompareSelectAnswer(aa,q);np.innerHTML='';}
+      else if(q.type==='divide'){renderDivideQuestion(q,qa);qt.innerHTML=q.emoji+' を <span class="text-red-500 font-black text-3xl">'+q.people+'人</span> で おなじ数ずつ わけよう！';renderDivideLinePhase(aa);np.innerHTML='';}
+      else if(q.type==='bai_fraction'){renderBaiQuestion(q,qa);renderBaiQuestionText(q,qt);renderBaiAnswer(q,aa);renderBaiNumpad(np);}
+    }
+
+    // ========== 折り紙 ==========
+    function renderOrigamiQuestion(q,c){var d=q.divisions;var h='<div class="relative w-40 h-40 md:w-48 md:h-48 bg-gradient-to-br from-pink-200 to-pink-400 rounded-lg shadow-lg overflow-hidden">';if(d>=2)h+='<div class="split-line absolute top-1/2 left-0 right-0 h-1 bg-pink-600" style="animation-delay:0.2s"></div>';if(d>=4)h+='<div class="split-line absolute top-0 bottom-0 left-1/2 w-1 bg-pink-600" style="animation-delay:0.4s"></div>';if(d>=8){h+='<div class="split-line absolute top-1/4 left-0 right-0 h-0.5 bg-pink-600 opacity-70" style="animation-delay:0.6s"></div>';h+='<div class="split-line absolute top-3/4 left-0 right-0 h-0.5 bg-pink-600 opacity-70" style="animation-delay:0.8s"></div>';}var hl={2:'top-0 left-0 w-full h-1/2',4:'top-0 left-0 w-1/2 h-1/2',8:'top-0 left-0 w-1/2 h-1/4'};h+='<div class="highlight-part absolute '+hl[d]+' bg-yellow-300/60 border-4 border-yellow-500 rounded" style="animation-delay:1s"></div></div>';c.innerHTML=h;}
+
+    // ========== テープ ==========
+    function renderTapeQuestion(q,c){var d=q.divisions;var h='<div class="relative w-full max-w-sm h-12 bg-gradient-to-r from-blue-300 to-blue-500 rounded-lg shadow-lg overflow-hidden">';for(var i=1;i<d;i++)h+='<div class="split-line absolute top-0 bottom-0 w-0.5 bg-blue-700 border-l border-dashed border-blue-800" style="left:'+((i/d)*100)+'%;animation-delay:'+(0.1*i)+'s"></div>';h+='<div class="highlight-part absolute top-0 left-0 h-full bg-yellow-300/60 border-4 border-yellow-500 rounded" style="width:'+(100/d)+'%;animation-delay:'+(0.1*d+0.2)+'s"></div></div>';c.innerHTML=h;}
+
+    // ========== 比較 ==========
+    function renderCompareQuestion(q,c){var s=q.ratio.short,l=q.ratio.long,ca=q.correctAnswer,wd=q.wrongDiv,tw=85,ow=(tw/l)*s;var dA,dB;if(ca==='A'){dA=l;dB=wd;}else{dA=wd;dB=l;}
+    var h='<div class="w-full max-w-md space-y-3"><div class="text-center mb-2"><span class="text-base font-bold text-purple-600">🟧 このテープ</span></div><div class="relative h-10 bg-gray-200 rounded-lg overflow-hidden mx-2"><div class="absolute top-0 left-0 h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-lg shadow highlight-part" style="width:'+ow+'%"></div></div>';
+    h+='<div class="mt-5 p-2 rounded-lg" id="tape-a-wrap"><span class="text-base font-bold text-blue-600">テープ A</span><div class="relative h-10 bg-gray-200 rounded-lg overflow-hidden mt-1"><div class="relative h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-lg shadow" style="width:'+tw+'%">';for(var i=1;i<dA;i++)h+='<div class="absolute top-0 bottom-0 border-l-2 border-dashed border-white/70" style="left:'+((i/dA)*100)+'%"></div>';h+='</div></div></div>';
+    h+='<div class="mt-2 p-2 rounded-lg" id="tape-b-wrap"><span class="text-base font-bold text-green-600">テープ B</span><div class="relative h-10 bg-gray-200 rounded-lg overflow-hidden mt-1"><div class="relative h-full bg-gradient-to-r from-green-400 to-green-500 rounded-lg shadow" style="width:'+tw+'%">';for(var j=1;j<dB;j++)h+='<div class="absolute top-0 bottom-0 border-l-2 border-dashed border-white/70" style="left:'+((j/dB)*100)+'%"></div>';h+='</div></div></div></div>';c.innerHTML=h;}
+
+    function renderCompareSelectAnswer(c,q){c.innerHTML='<p class="text-lg font-bold text-gray-600 mb-3">まず テープを えらんでね！</p><div class="flex gap-4"><button id="select-a" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-xl text-xl transition shadow-lg">テープ A</button><button id="select-b" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-xl text-xl transition shadow-lg">テープ B</button></div>';document.getElementById('select-a').addEventListener('click',function(){gameState.selectedTape='A';onTapeSelected(q);});document.getElementById('select-b').addEventListener('click',function(){gameState.selectedTape='B';onTapeSelected(q);});}
+    function onTapeSelected(q){var a=document.getElementById('tape-a-wrap'),b=document.getElementById('tape-b-wrap');if(gameState.selectedTape==='A'){a.classList.add('tape-selected');b.style.opacity='0.3';}else{b.classList.add('tape-selected');a.style.opacity='0.3';}var cl=gameState.selectedTape==='A'?'text-blue-500':'text-green-500';document.getElementById('question-text').innerHTML='テープ <span class="text-2xl font-black '+cl+'">'+gameState.selectedTape+'</span> の なんぶんの いくつ？';gameState.numerator=null;gameState.denominator=null;gameState.inputTarget='denominator';renderFractionAnswer(document.getElementById('answer-area'));renderNumpad(document.getElementById('numpad'));}
+
+    // ========== 分数回答 ==========
+    function renderFractionAnswer(c){c.innerHTML='<div class="flex flex-col items-center gap-2"><div class="flex items-center gap-6"><div class="flex flex-col items-center"><div id="numerator-display" class="waiting-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300">?</div><div class="fraction-line bg-gray-800"></div><div id="denominator-display" class="active-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300">?</div></div><div id="input-guide" class="text-lg font-bold text-orange-500">← まず 分母（下）を<br>　 いれてね！</div></div></div><button id="submit-answer" class="mt-4 bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>こたえる！</button>';document.getElementById('submit-answer').addEventListener('click',checkAnswer);}
+    function updateInputDisplay(){var d=document.getElementById('denominator-display'),n=document.getElementById('numerator-display'),g=document.getElementById('input-guide');if(!d||!n)return;if(gameState.inputTarget==='denominator'){d.className='active-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';n.className='waiting-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';if(g)g.innerHTML='← まず 分母（下）を<br>　 いれてね！';}else if(gameState.inputTarget==='numerator'){d.className='done-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';n.className='active-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';if(g)g.innerHTML='← つぎ 分子（上）を<br>　 いれてね！';}else{d.className='done-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';n.className='done-input text-4xl font-black h-20 w-20 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';if(g)g.innerHTML='👇 こたえる！を<br>　 おしてね！';}}
+
+    function renderNumpad(c){var h='';for(var i=1;i<=9;i++)h+='<button class="num-btn bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-800 shadow" onclick="inputNumber('+i+')">'+i+'</button>';h+='<button class="num-btn bg-gradient-to-br from-red-100 to-red-200 hover:from-red-200 hover:to-red-300 text-red-600 shadow font-black text-xl" onclick="clearInput()">C</button>';c.innerHTML=h;}
+    function inputNumber(num){if(gameState.inputTarget==='denominator'){gameState.denominator=num;document.getElementById('denominator-display').textContent=num;document.getElementById('denominator-display').classList.add('pop-in');setTimeout(function(){var e=document.getElementById('denominator-display');if(e)e.classList.remove('pop-in');gameState.inputTarget='numerator';updateInputDisplay();},500);}else if(gameState.inputTarget==='numerator'){gameState.numerator=num;document.getElementById('numerator-display').textContent=num;document.getElementById('numerator-display').classList.add('pop-in');setTimeout(function(){var e=document.getElementById('numerator-display');if(e)e.classList.remove('pop-in');gameState.inputTarget='done';updateInputDisplay();},500);var s=document.getElementById('submit-answer');if(s)s.disabled=false;}}
+    function clearInput(){gameState.numerator=null;gameState.denominator=null;gameState.inputTarget='denominator';var n=document.getElementById('numerator-display'),d=document.getElementById('denominator-display');if(n)n.textContent='?';if(d)d.textContent='?';var s=document.getElementById('submit-answer');if(s)s.disabled=true;updateInputDisplay();}
+
+    // ========== レベル4: おかしをわけよう ==========
+    function renderDivideQuestion(q,c){var h='<div class="dot-grid" id="dot-grid">';for(var col=0;col<q.cols;col++){h+='<div class="dot-column" data-col="'+col+'">';for(var r=0;r<q.rows;r++)h+='<div class="dot-cell">'+q.emoji+'</div>';h+='</div>';if(col<q.cols-1)h+='<div class="dot-gap" data-gap="'+(col+1)+'" id="gap-'+(col+1)+'"><div class="dot-gap-hint"></div></div>';}h+='</div><p class="text-base text-gray-400 mt-2 text-center">↕ あいだを タップして 線を ひこう！</p>';c.innerHTML=h;for(var c2=1;c2<q.cols;c2++){(function(p){var g=document.getElementById('gap-'+p);if(g)g.addEventListener('click',function(){if(gameState.dividePhase!=='lines')return;toggleDivideLine(p);});})(c2);}}
+    function toggleDivideLine(p){var g=document.getElementById('gap-'+p);var i=gameState.drawnLines.indexOf(p);if(i>=0){gameState.drawnLines.splice(i,1);g.classList.remove('line-drawn');}else{gameState.drawnLines.push(p);g.classList.add('line-drawn');g.querySelector('.dot-gap-hint').classList.add('pop-in');setTimeout(function(){var h=g.querySelector('.dot-gap-hint');if(h)h.classList.remove('pop-in');},500);}}
+    function renderDivideLinePhase(c){c.innerHTML='<p class="text-lg font-bold text-purple-600 mb-3">どこで わける？ タップしてね！</p><button id="confirm-lines" class="bg-gradient-to-r from-purple-400 to-purple-600 hover:from-purple-500 hover:to-purple-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition">わけた！</button>';document.getElementById('confirm-lines').addEventListener('click',checkDivideLines);}
+    function checkDivideLines(){var q=gameState.isRetrying?gameState.wrongQuestions[gameState.currentQuestion]:gameState.questions[gameState.currentQuestion];var cor=q.correctLines.slice().sort(function(a,b){return a-b;}),dr=gameState.drawnLines.slice().sort(function(a,b){return a-b;});var ok=cor.length===dr.length&&cor.every(function(v,i){return v===dr[i];});if(ok){gameState.dividePhase='answer';colorDotGroups(q);document.getElementById('question-text').innerHTML='1人ぶんは '+q.emoji+' なんこ？ 分数で こたえよう！';renderDivideAnswerPhase(document.getElementById('answer-area'),q);renderDivideNumpad(document.getElementById('numpad'));}else{var gr=document.getElementById('dot-grid');gr.classList.add('shake');setTimeout(function(){gr.classList.remove('shake');},500);var aa=document.getElementById('answer-area');aa.innerHTML='<p class="text-base text-red-500 font-bold mb-3">'+q.people+'人で わけるから、おなじ数ずつに なるところに 線を ひいてね！</p><button id="confirm-lines" class="bg-gradient-to-r from-purple-400 to-purple-600 hover:from-purple-500 hover:to-purple-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition">わけた！</button>';document.getElementById('confirm-lines').addEventListener('click',checkDivideLines);}}
+    function colorDotGroups(q){var sl=q.correctLines.slice().sort(function(a,b){return a-b;}),bd=[0].concat(sl).concat([q.cols]),cols=document.querySelectorAll('#dot-grid .dot-column'),gaps=document.querySelectorAll('#dot-grid .dot-gap');var added=false;for(var c=0;c<cols.length;c++)for(var g=0;g<bd.length-1;g++)if(c>=bd[g]&&c<bd[g+1]){cols[c].classList.add('dot-group-'+g);if(g===0&&!added&&c===bd[1]-1){var lbl=document.createElement('div');lbl.className='dot-group-label';lbl.textContent='↑ 1人ぶん';cols[c].appendChild(lbl);added=true;}break;}for(var i=0;i<gaps.length;i++){gaps[i].style.pointerEvents='none';}}
+    function renderDivideAnswerPhase(c,q){gameState.divideInputStep='denominator';gameState.denominator=null;gameState.numerator=null;gameState.divideCount=null;
+      c.innerHTML='<div class="flex items-center justify-center gap-4 flex-wrap"><span class="text-2xl font-black text-gray-700">'+q.total+'この</span><div class="flex flex-col items-center"><div id="div-numer" class="waiting-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300">?</div><div class="fraction-line bg-gray-800" style="width:80px"></div><div id="div-denom" class="active-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300">?</div></div><span class="text-2xl font-black text-gray-700">で</span><div id="div-count" class="waiting-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300">?</div><span class="text-2xl font-black text-gray-700">こ</span></div><div id="divide-guide" class="text-base font-bold text-orange-500 mt-3 text-center">← まず 分母（下）を いれてね！</div><button id="submit-divide" class="mt-4 bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>こたえる！</button>';
+      document.getElementById('submit-divide').addEventListener('click',checkAnswer);}
+    function renderDivideNumpad(c){var h='';for(var i=1;i<=9;i++)h+='<button class="num-btn bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-800 shadow" onclick="inputDivideNumber('+i+')">'+i+'</button>';h+='<button class="num-btn bg-gradient-to-br from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-600 shadow font-black text-xl" onclick="inputDivideNumber(0)">0</button>';h+='<button class="num-btn bg-gradient-to-br from-red-100 to-red-200 hover:from-red-200 hover:to-red-300 text-red-600 shadow font-black text-xl" onclick="clearDivideInput()">C</button>';c.innerHTML=h;}
+    function inputDivideNumber(n){var st=gameState.divideInputStep;if(st==='denominator'){gameState.denominator=n;var e=document.getElementById('div-denom');e.textContent=n;e.classList.add('pop-in');setTimeout(function(){e.classList.remove('pop-in');e.className='done-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';gameState.divideInputStep='numerator';document.getElementById('div-numer').className='active-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';document.getElementById('divide-guide').textContent='← つぎ 分子（上）を いれてね！';},400);}else if(st==='numerator'){gameState.numerator=n;var e2=document.getElementById('div-numer');e2.textContent=n;e2.classList.add('pop-in');setTimeout(function(){e2.classList.remove('pop-in');e2.className='done-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';gameState.divideInputStep='count';document.getElementById('div-count').className='active-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';document.getElementById('divide-guide').textContent='← さいご 1人ぶんは なんこ？';},400);}else if(st==='count'){if(gameState.divideCount!==null&&gameState.divideCount>0&&gameState.divideCount<10)gameState.divideCount=gameState.divideCount*10+n;else gameState.divideCount=n;var e3=document.getElementById('div-count');e3.textContent=gameState.divideCount;e3.classList.add('pop-in');setTimeout(function(){e3.classList.remove('pop-in');e3.className='done-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';gameState.divideInputStep='done';document.getElementById('divide-guide').textContent='👇 こたえる！を おしてね！';},400);document.getElementById('submit-divide').disabled=false;}}
+    function clearDivideInput(){gameState.denominator=null;gameState.numerator=null;gameState.divideCount=null;gameState.divideInputStep='denominator';var d=document.getElementById('div-denom'),n=document.getElementById('div-numer'),c=document.getElementById('div-count');if(d){d.textContent='?';d.className='active-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';}if(n){n.textContent='?';n.className='waiting-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';}if(c){c.textContent='?';c.className='waiting-input text-3xl font-black h-16 w-16 flex items-center justify-center rounded-2xl shadow-lg transition-all duration-300';}var g=document.getElementById('divide-guide');if(g)g.textContent='← まず 分母（下）を いれてね！';var s=document.getElementById('submit-divide');if(s)s.disabled=true;}
+
+    // ========== レベル5: ばいと分数 ==========
+    function renderBaiQuestion(q,c){
+      var m=q.multiplier,ln=q.longIsA?q.names.a:q.names.b,sn=q.longIsA?q.names.b:q.names.a;
+      var lp=90,sp=lp/m;
+      var h='<div class="bai-tape-container">';
+      // 長いテープ
+      h+='<div class="bai-tape-row"><div class="bai-tape-label bg-gradient-to-br from-blue-400 to-blue-600">'+ln.charAt(0)+'</div>';
+      h+='<div class="bai-tape-bar bg-gradient-to-r from-blue-300 to-blue-500 shadow-md" style="width:'+lp+'%"><div class="bai-tape-dividers">';
+      for(var i=1;i<m;i++)h+='<div class="bai-tape-divider" style="left:'+((i/m)*100)+'%"></div>';
+      h+='</div></div></div>';
+      // 短いテープ
+      h+='<div class="bai-tape-row"><div class="bai-tape-label bg-gradient-to-br from-pink-400 to-pink-600">'+sn.charAt(0)+'</div>';
+      h+='<div class="bai-tape-bar bg-gradient-to-r from-pink-300 to-pink-500 shadow-md" style="width:'+sp+'%"></div></div>';
+      h+='<div class="flex justify-center gap-6 mt-2 text-sm text-gray-500"><span>🔵 '+ln+'さん</span><span>🩷 '+sn+'さん</span></div>';
+      h+='</div>';
+      c.innerHTML=h;
+    }
+
+    function renderBaiQuestionText(q,c){
+      var ln=q.longIsA?q.names.a:q.names.b,sn=q.longIsA?q.names.b:q.names.a;
+      if(q.askType==='bai'){c.innerHTML='<span class="text-blue-500 font-black">'+ln+'</span>さんの テープは<br><span class="text-pink-500 font-black">'+sn+'</span>さんの テープの 何ばい？';}
+      else if(q.askType==='fraction'){c.innerHTML='<span class="text-pink-500 font-black">'+sn+'</span>さんの テープは<br><span class="text-blue-500 font-black">'+ln+'</span>さんの テープの 何分のいくつ？';}
+      else{c.innerHTML='2つの テープを くらべよう！<br><span class="text-base text-gray-500">「何ばい」と「何分のいくつ」を こたえてね</span>';}
+    }
+
+    function renderBaiAnswer(q,c){
+      var ln=q.longIsA?q.names.a:q.names.b,sn=q.longIsA?q.names.b:q.names.a;
+      if(q.askType==='bai'){
+        gameState.baiInputStep='bai';gameState.baiAnswer=null;
+        c.innerHTML='<div class="bai-answer-row"><div id="bai-val" class="ans-box active-input">?</div><span class="text-2xl font-black text-gray-700">ばい</span></div><div id="bai-guide" class="text-base font-bold text-orange-500 mt-2 text-center">何ばいかな？ 数字をいれてね</div><button id="submit-bai" class="mt-4 bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>こたえる！</button>';
+        document.getElementById('submit-bai').addEventListener('click',checkAnswer);
+      } else if(q.askType==='fraction'){
+        gameState.baiInputStep='denominator';gameState.denominator=null;gameState.numerator=null;
+        c.innerHTML='<div class="bai-answer-row"><div class="bai-fraction-block"><div id="bai-numer" class="ans-box waiting-input">?</div><div class="fraction-line-sm bg-gray-800"></div><div id="bai-denom" class="ans-box active-input">?</div></div></div><div id="bai-guide" class="text-base font-bold text-orange-500 mt-2 text-center">← まず 分母（下）を いれてね！</div><button id="submit-bai" class="mt-4 bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>こたえる！</button>';
+        document.getElementById('submit-bai').addEventListener('click',checkAnswer);
+      } else {
+        gameState.baiInputStep='bai';gameState.baiAnswer=null;gameState.denominator=null;gameState.numerator=null;
+        c.innerHTML='<div class="space-y-3"><div class="bai-answer-row"><span class="text-lg font-bold text-blue-500">'+ln+'さんは '+sn+'さんの</span><div id="bai-val" class="ans-box active-input">?</div><span class="text-2xl font-black text-gray-700">ばい</span></div><div class="bai-answer-row"><span class="text-lg font-bold text-pink-500">'+sn+'さんは '+ln+'さんの</span><div class="bai-fraction-block"><div id="bai-numer" class="ans-box waiting-input text-xl" style="width:44px;height:44px">?</div><div class="fraction-line-sm bg-gray-800"></div><div id="bai-denom" class="ans-box waiting-input text-xl" style="width:44px;height:44px">?</div></div></div></div><div id="bai-guide" class="text-base font-bold text-orange-500 mt-2 text-center">まず「何ばい？」を いれてね！</div><button id="submit-bai" class="mt-4 bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-black py-3 px-8 rounded-2xl text-xl shadow-lg transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>こたえる！</button>';
+        document.getElementById('submit-bai').addEventListener('click',checkAnswer);
+      }
+    }
+
+    function renderBaiNumpad(c){var h='';for(var i=1;i<=9;i++)h+='<button class="num-btn bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-800 shadow" onclick="inputBaiNumber('+i+')">'+i+'</button>';h+='<button class="num-btn bg-gradient-to-br from-red-100 to-red-200 hover:from-red-200 hover:to-red-300 text-red-600 shadow font-black text-xl" onclick="clearBaiInput()">C</button>';c.innerHTML=h;}
+
+    function inputBaiNumber(num){
+      var st=gameState.baiInputStep;
+      var q=gameState.isRetrying?gameState.wrongQuestions[gameState.currentQuestion]:gameState.questions[gameState.currentQuestion];
+      if(st==='bai'){
+        gameState.baiAnswer=num;var e=document.getElementById('bai-val');e.textContent=num;e.classList.add('pop-in');
+        setTimeout(function(){e.classList.remove('pop-in');e.className='ans-box done-input';
+          if(q.askType==='both'){gameState.baiInputStep='denominator';document.getElementById('bai-denom').className='ans-box active-input text-xl';document.getElementById('bai-guide').textContent='← つぎ 分母（下）を いれてね！';}
+          else{gameState.baiInputStep='done';document.getElementById('bai-guide').textContent='👇 こたえる！を おしてね！';document.getElementById('submit-bai').disabled=false;}
+        },400);
+        if(q.askType==='bai')document.getElementById('submit-bai').disabled=false;
+      } else if(st==='denominator'){
+        gameState.denominator=num;var e2=document.getElementById('bai-denom');e2.textContent=num;e2.classList.add('pop-in');
+        setTimeout(function(){e2.classList.remove('pop-in');e2.className='ans-box done-input text-xl';gameState.baiInputStep='numerator';document.getElementById('bai-numer').className='ans-box active-input text-xl';document.getElementById('bai-guide').textContent='← つぎ 分子（上）を いれてね！';},400);
+      } else if(st==='numerator'){
+        gameState.numerator=num;var e3=document.getElementById('bai-numer');e3.textContent=num;e3.classList.add('pop-in');
+        setTimeout(function(){e3.classList.remove('pop-in');e3.className='ans-box done-input text-xl';gameState.baiInputStep='done';document.getElementById('bai-guide').textContent='👇 こたえる！を おしてね！';},400);
+        document.getElementById('submit-bai').disabled=false;
+      }
+    }
+
+    function clearBaiInput(){
+      var q=gameState.isRetrying?gameState.wrongQuestions[gameState.currentQuestion]:gameState.questions[gameState.currentQuestion];
+      gameState.baiAnswer=null;gameState.denominator=null;gameState.numerator=null;
+      var bv=document.getElementById('bai-val'),bd=document.getElementById('bai-denom'),bn=document.getElementById('bai-numer');
+      if(q.askType==='bai'){gameState.baiInputStep='bai';if(bv){bv.textContent='?';bv.className='ans-box active-input';}document.getElementById('bai-guide').textContent='何ばいかな？ 数字をいれてね';}
+      else if(q.askType==='fraction'){gameState.baiInputStep='denominator';if(bd){bd.textContent='?';bd.className='ans-box active-input';}if(bn){bn.textContent='?';bn.className='ans-box waiting-input';}document.getElementById('bai-guide').textContent='← まず 分母（下）を いれてね！';}
+      else{gameState.baiInputStep='bai';if(bv){bv.textContent='?';bv.className='ans-box active-input';}if(bd){bd.textContent='?';bd.className='ans-box waiting-input text-xl';}if(bn){bn.textContent='?';bn.className='ans-box waiting-input text-xl';}document.getElementById('bai-guide').textContent='まず「何ばい？」を いれてね！';}
+      document.getElementById('submit-bai').disabled=true;
+    }
+
+    // ========== 回答チェック ==========
+    function checkAnswer(){
+      if(gameState.answering)return;
+      gameState.answering=true;
+      var q=gameState.isRetrying?gameState.wrongQuestions[gameState.currentQuestion]:gameState.questions[gameState.currentQuestion];
+      var ok;
+      if(q.type==='compare'){ok=gameState.selectedTape===q.correctAnswer&&gameState.numerator===q.answer.numerator&&gameState.denominator===q.answer.denominator;}
+      else if(q.type==='divide'){ok=gameState.denominator===q.answer.denominator&&gameState.numerator===q.answer.numerator&&gameState.divideCount===q.answer.count;}
+      else if(q.type==='bai_fraction'){
+        if(q.askType==='bai')ok=gameState.baiAnswer===q.answer.bai;
+        else if(q.askType==='fraction')ok=gameState.denominator===q.answer.denominator&&gameState.numerator===q.answer.numerator;
+        else ok=gameState.baiAnswer===q.answer.bai&&gameState.denominator===q.answer.denominator&&gameState.numerator===q.answer.numerator;
+      } else{ok=gameState.numerator===q.answer.numerator&&gameState.denominator===q.answer.denominator;}
+      showFeedback(ok,q);
+    }
+
+    // ========== フィードバック ==========
+    function showFeedback(ok,q){
+      var ov=document.getElementById('feedback-overlay'),ct=document.getElementById('feedback-content');
+      var ex='';
+      if(q.type==='origami'||q.type==='tape'){ex=q.divisions+'こに わけた 1つぶんは<br><span class="text-2xl font-black text-purple-600">'+q.answer.denominator+'ぶんの'+q.answer.numerator+'</span><br>だよ！';}
+      else if(q.type==='compare'){ex='オレンジのテープは<br>テープ <span class="font-black">'+q.correctAnswer+'</span> の<br><span class="text-2xl font-black text-purple-600">'+q.answer.denominator+'ぶんの'+q.answer.numerator+'</span><br>だよ！';}
+      else if(q.type==='divide'){ex=q.total+'こを '+q.people+'人で わけると<br><span class="text-2xl font-black text-purple-600">'+q.answer.denominator+'ぶんの'+q.answer.numerator+'で '+q.answer.count+'こ</span><br>だよ！';}
+      else if(q.type==='bai_fraction'){
+        var ln=q.longIsA?q.names.a:q.names.b,sn=q.longIsA?q.names.b:q.names.a;
+        if(q.askType==='bai'){ex=ln+'さんのテープは<br>'+sn+'さんの<br><span class="text-2xl font-black text-blue-600">'+q.answer.bai+'ばい</span><br>だよ！';}
+        else if(q.askType==='fraction'){ex=sn+'さんのテープは<br>'+ln+'さんの<br><span class="text-2xl font-black text-pink-600">'+q.answer.denominator+'分の'+q.answer.numerator+'</span><br>だよ！';}
+        else{ex=ln+'さんは '+sn+'さんの <span class="font-black text-blue-600">'+q.answer.bai+'ばい</span><br>'+sn+'さんは '+ln+'さんの <span class="font-black text-pink-600">'+q.answer.denominator+'分の'+q.answer.numerator+'</span><br>だよ！';}
+      }
+      if(ok){
+        var stk=awardSticker(),idx=gameState.currentQuestion;
+        gameState.dotStickers[idx]=stk.e;
+        playSound('ok');
+        ct.innerHTML='<div class="text-6xl mb-4 bounce">⭕</div><div class="text-3xl font-black text-green-500 mb-4">せいかい！</div><div class="text-lg text-gray-600">'+ex+'</div><div class="sticker-get"><span class="stk">'+stk.e+'</span><span>シール ゲット！</span>'+(stk.isNew?'<span class="sticker-new">あたらしい！</span>':'')+'</div>';
+        var rid=gameState.runId;
+        openFeedback(3000,function(){flyStickerToDot(idx,stk.e,function(){if(rid===gameState.runId)nextQuestion();});});
+        return;
+      }
+      ct.innerHTML='<div class="text-6xl mb-4">💡</div><div class="text-3xl font-black text-orange-500 mb-4">おしい！ こたえは…</div><div class="text-lg text-gray-600">'+ex+'</div>';
+      if(gameState.isRetrying)gameState.retryWrong.push(q);else gameState.wrongQuestions.push(q);
+      if(gameState.currentLevel===6){openFeedback(3500,showSpecialFailure);return;}
+      openFeedback(3500,nextQuestion);
+    }
+
+    /* 答えの吹き出し：決まった時間で先へ。1.5秒たてばタップでも先へ（1回だけ進む） */
+    function openFeedback(ms,next){
+      var ov=document.getElementById('feedback-overlay'),t0=Date.now(),went=false,rid=gameState.runId;
+      function go(){if(went)return;went=true;ov.onclick=null;ov.classList.add('hidden');if(rid===gameState.runId)next();}
+      ov.onclick=function(){if(Date.now()-t0>=1500)go();};
+      ov.classList.remove('hidden');
+      setTimeout(go,ms);
+    }
+
+    function showSpecialFailure(){var c=document.getElementById('result-content');var got=gameState.dotStickers.filter(function(x){return x;}).length;c.innerHTML='<div class="text-6xl mb-4">💪</div><h2 class="text-3xl font-black text-orange-500 mb-4">おしい！</h2><p class="text-xl text-gray-600 mb-6">'+(got>0?got+'もん れんぞく せいかい！<br>':'')+'さいしょから もういちど ちょうせんしよう</p><button id="retry-special" class="bg-gradient-to-r from-red-400 to-pink-600 text-white font-bold py-3 px-6 rounded-xl">もういちど ちょうせん！</button><button id="back-to-top" class="mt-4 bg-gray-300 text-gray-700 font-bold py-3 px-6 rounded-xl block mx-auto">トップにもどる</button>';document.getElementById('retry-special').addEventListener('click',function(){startLevel(6);});document.getElementById('back-to-top').addEventListener('click',function(){showScreen('top-screen');updateLevelButtons();});showScreen('result-screen');}
+    function nextQuestion(){var t=gameState.isRetrying?gameState.wrongQuestions.length:gameState.totalQuestions;gameState.currentQuestion++;if(gameState.currentQuestion>=t){if(!gameState.isRetrying&&gameState.wrongQuestions.length>0)showRetryMessage();else if(gameState.isRetrying&&gameState.retryWrong.length>0){gameState.wrongQuestions=gameState.retryWrong;gameState.retryWrong=[];showRetryMessage();}else showClearScreen();}else showQuestion();}
+    function showRetryMessage(){var c=document.getElementById('result-content');c.innerHTML='<div class="text-6xl mb-4">📝</div><h2 class="text-2xl font-black text-blue-500 mb-4">まちがえた もんだいに<br>ちょうせん！</h2><p class="text-lg text-gray-600 mb-6">あと '+gameState.wrongQuestions.length+'もん がんばろう！</p><button id="start-retry" class="bg-gradient-to-r from-blue-400 to-blue-600 text-white font-bold py-3 px-6 rounded-xl">スタート！</button>';document.getElementById('start-retry').addEventListener('click',function(){gameState.isRetrying=true;gameState.currentQuestion=0;gameState.dotStickers=[];gameState.retryWrong=[];showScreen('game-screen');showQuestion();});showScreen('result-screen');}
+
+    function showClearScreen(){
+      var lv=gameState.currentLevel,c=document.getElementById('result-content');
+      if(lv===1)gameState.level1Cleared=true;if(lv===2)gameState.level2Cleared=true;if(lv===3)gameState.level3Cleared=true;
+      if(lv===4)gameState.level4Cleared=true;if(lv===5)gameState.level5Cleared=true;if(lv===6)gameState.specialCleared=true;
+      var firstBig=!save.big[lv];
+      save.big[lv]=true;writeSave();playSound('clear');
+      var bs=BIG_STK[lv];
+      var big='<div class="big-sticker-clear pop-in" style="background:'+bs.bg+'"><span class="ic">'+bs.icon+'</span>'+bs.name+'</div><p class="text-lg font-black text-orange-500 mb-4">'+(firstBig?'大きい シールを ゲット！':'大きい シールは もう もっているよ')+'</p>';
+      var msg='';
+      if(lv===6){msg='<h2 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 mb-4">スペシャルクリア！</h2>'+big+'<p class="text-xl text-gray-600 mb-6">すごい！ぜんぶ せいかい！<br>きみは 分数マスターだ！</p>';}
+      else{var ln=['','おりがみ','テープ','くらべよう','おかしをわけよう','ばいと分数','スペシャル'];var nl=lv+1;var nn=nl===6?'スペシャル':'レベル'+nl+'「'+ln[nl]+'」';msg='<h2 class="text-3xl font-black text-green-500 mb-4">レベル'+lv+' クリア！</h2>'+big+'<p class="text-xl text-gray-600 mb-6">やったね！<br>つぎは '+nn+'だ！</p>';}
+      c.innerHTML=msg+'<button id="back-to-top-clear" class="bg-gradient-to-r from-purple-400 to-purple-600 text-white font-bold py-3 px-6 rounded-xl">トップにもどる</button>';
+      document.getElementById('back-to-top-clear').addEventListener('click',function(){showScreen('top-screen');updateLevelButtons();});
+      showScreen('result-screen');
+    }
+
+    // ========== イベントリスナー ==========
+    document.getElementById('level1-btn').addEventListener('click',function(){startLevel(1);});
+    document.getElementById('level2-btn').addEventListener('click',function(){startLevel(2);});
+    document.getElementById('level3-btn').addEventListener('click',function(){startLevel(3);});
+    document.getElementById('level4-btn').addEventListener('click',function(){startLevel(4);});
+    document.getElementById('level5-btn').addEventListener('click',function(){startLevel(5);});
+    document.getElementById('special-btn').addEventListener('click',function(){showScreen('special-intro');});
+    document.getElementById('special-start').addEventListener('click',function(){startLevel(6);});
+    document.getElementById('special-cancel').addEventListener('click',function(){showScreen('top-screen');});
+    document.getElementById('back-btn').addEventListener('click',function(){gameState.runId=(gameState.runId||0)+1;showScreen('top-screen');updateLevelButtons();});
+    renderSoundButtons();
+    updateLevelButtons();
+  </script>
+<script>
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});}catch(e){}
+if('serviceWorker' in navigator && location.protocol==='https:'){try{navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}}
+</script>
+</body>
+</html>
